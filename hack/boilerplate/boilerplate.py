@@ -29,7 +29,7 @@ parser.add_argument(
     help="list of files to check, all files if unspecified",
     nargs='*')
 
-rootdir = os.path.dirname(__file__) + "/../../"
+rootdir = f"{os.path.dirname(__file__)}/../../"
 rootdir = os.path.abspath(rootdir)
 parser.add_argument(
     "--rootdir", default=rootdir, help="root directory to examine")
@@ -55,9 +55,8 @@ def get_refs():
             os.path.join(args.boilerplate_dir, "boilerplate.*.txt")):
         extension = os.path.basename(path).split(".")[1]
 
-        ref_file = open(path, 'r')
-        ref = ref_file.read().splitlines()
-        ref_file.close()
+        with open(path, 'r') as ref_file:
+            ref = ref_file.read().splitlines()
         refs[extension] = ref
 
     return refs
@@ -67,7 +66,7 @@ def file_passes(filename, refs, regexs):
     try:
         f = open(filename, 'r')
     except Exception as exc:
-        print("Unable to open %s: %s" % (filename, exc), file=verbose_out)
+        print(f"Unable to open {filename}: {exc}", file=verbose_out)
         return False
 
     data = f.read()
@@ -75,11 +74,7 @@ def file_passes(filename, refs, regexs):
 
     basename = os.path.basename(filename)
     extension = file_extension(filename)
-    if extension != "":
-        ref = refs[extension]
-    else:
-        ref = refs[basename]
-
+    ref = refs[extension] if extension != "" else refs[basename]
     # remove build tags from the top of Go files
     if extension == "go":
         p = regexs["go_build_constraints"]
@@ -106,7 +101,7 @@ def file_passes(filename, refs, regexs):
     p = regexs["year"]
     for d in data:
         if p.search(d):
-            print('File %s is missing the year' % filename, file=verbose_out)
+            print(f'File {filename} is missing the year', file=verbose_out)
             return False
 
     # Replace all occurrences of the regex "2017|2016|2015|2014" with "YEAR"
@@ -119,8 +114,10 @@ def file_passes(filename, refs, regexs):
     # if we don't match the reference at this point, fail
     if ref != data:
         print(
-            "Header in %s does not match reference, diff:" % filename,
-            file=verbose_out)
+            f"Header in {filename} does not match reference, diff:",
+            file=verbose_out,
+        )
+
         if args.verbose:
             print(file=verbose_out)
             for line in difflib.unified_diff(
@@ -145,11 +142,12 @@ skipped_dirs = [
 
 
 def normalize_files(files):
-    newfiles = []
-    for pathname in files:
-        if any(x in pathname for x in skipped_dirs):
-            continue
-        newfiles.append(pathname)
+    newfiles = [
+        pathname
+        for pathname in files
+        if all(x not in pathname for x in skipped_dirs)
+    ]
+
     for i, pathname in enumerate(newfiles):
         if not os.path.isabs(pathname):
             newfiles[i] = os.path.join(args.rootdir, pathname)
@@ -185,9 +183,7 @@ def get_files(extensions):
 
 
 def get_regexs():
-    regexs = {}
-    # Search for "YEAR" which exists in the boilerplate, but shouldn't in the real thing
-    regexs["year"] = re.compile('YEAR')
+    regexs = {"year": re.compile('YEAR')}
     # dates can be 2014, 2015, 2016, or 2017; company holder names can be anything
     regexs["date"] = re.compile('(2014|2015|2016|2017)')
     # strip the following build constraints/tags:
